@@ -4,6 +4,27 @@ import {User} from "../models/user.model.js"
 import {uploadCloudinary} from "../utils/cloudinary.js"
 import {ApiResponse} from "../utils/ApiResponse.js"
 
+
+const generateAccessAndRefreshTokens = async (userId) =>{
+
+    try {
+        const user = await User.findById(userId)
+        const accessToken =  user.generateAccessToken()
+        const refreshToken = user.generateRefreshToken()
+
+        user.refreshToken = refreshToken
+
+        await user.save({validateBeforeSave: false});
+    
+       return {accessToken , refreshToken}
+
+
+    } catch (error) {
+        throw new ApiError(500 , "Something went wrong while generating or refreshing token")
+    }
+}
+
+
 const registerUser = asyncHandler(async (req , res) =>{
     
     const {fullName , email , username , password} = req.body;
@@ -78,13 +99,94 @@ const registerUser = asyncHandler(async (req , res) =>{
 })
 
 
-export {registerUser,}
+const loginUser = asyncHandler(async(req , res) => {
+
+    const { email , username ,password } = req.body;
+
+    if(!username || !email) {
+
+        throw new ApiError(400 , "username and email required");
+
+    }
+
+   const user = await User.findOne( {
+
+        $or :[ {username}, {email}]
+
+    })
+
+    if(!User) {
+
+        throw new ApiError(404 , "User does not exist")
+
+    }
+
+   const isPasswordValid = await user.isPasswordCorrect(password)
+   
+   
+    if(!isPasswordValid) {
+
+        throw new ApiError(401 , "Invalid user credentials")
+
+    }
+
+    const {accessToken , refreshToken } = await generateAccessAndRefreshTokens(user._id)
+   
+    const loggedInUser= User.findById(user._id).select("-password -refreshToken")
+   
+    const options = {
+
+        httpOnly: true,
+        secure: true,
+    }
+
+    return res
+    .status(200)
+    .cookie("accessToken", accessToken , options)
+    .cookie("refreshToken", refreshToken , options)
+    .json(
+        new ApiResponse(200 , {
+            user: loggedInUser, accessToken , refreshToken,
+
+        }),
+
+        "User Logged in Successfully"
+    )
+
+})
+
+const logoutUser = asyncHandler(async (req , res)=>{
+    
+   await User.findByIdAndUpdate(
+        req.user._id,
+        {
+            $set: {
+                refreshToken: undefined
+            }
+        }, 
+
+        {
+            new: true 
+        }
+    )
+
+      
+    const options = {
+
+        httpOnly: true,
+        secure: true,
+    }
+    
+    return res
+    .status(200)
+    .clearCookie("accessToken" , options)
+    .clearCookie("refreshToken" , options)
+    .json( new ApiResponse(200 , {} , "User logged Out"))
+})
 
 
-// step 1 take name email , password and all input required like profile avtar
-// step 2 validation - not empty and others(check for image avtar)
-// step 3 upload on cloudnary for avtar also for multer 
-// step 4 send a database req to store it after making user object
-// step 5 remove password and refresh token field from response
-// step 6 check for user creation 
-// step 7 return response   
+
+export { logoutUser ,registerUser, loginUser}
+
+
+   
