@@ -1,6 +1,7 @@
 import { v2 as cloudinary} from "cloudinary";
 import fs from "fs";
 
+
     cloudinary.config({ 
 
      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
@@ -47,5 +48,32 @@ import fs from "fs";
      }
     
   };
+
+   const deleteFromCloudinary = async (oldimageUrl) => {
+
+     try {
+      
+    if(!oldimageUrl) return null
+      
+     const parts = oldimageUrl.split("/")
+
+     const fileName = parts.pop().split(".")[0]
+
+     const folderPath = parts.slice(parts.indexOf("upload")+1).join("/")
+     
+     const publicId = `${folderPath}/${fileName}`
    
- export {uploadCloudinary};
+     await cloudinary.uploader.destroy(publicId)
+
+     }
+     catch (error) {
+
+       console.log('Error while deleting from cloudinary' , error)
+
+     }
+
+
+
+   }
+   
+ export {uploadCloudinary , deleteFromCloudinary};
